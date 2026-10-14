@@ -5,6 +5,7 @@ import type {
   WebClient,
 } from "@slack/web-api";
 import { createUser, indexThread } from "../tools/indexer.js";
+import { getForwardedTicketUser, type MessageMetadata } from "./forward.js";
 import type { TicketWithAssignees } from "./types.js";
 import { prisma } from "./prisma.js";
 import { syncTicketReaction } from "./slack.js";
@@ -430,24 +431,6 @@ export async function handleManagedProgramMacro(
     console.error("Ticket: ", ticket.id);
     return false;
   }
-}
-
-export const FORWARD_EVENT_TYPE = "nephthys_plus_forward";
-
-export type MessageMetadata = {
-  event_type: string;
-  event_payload?: { source_user_id?: unknown; ticket?: unknown };
-};
-
-export function getForwardedTicketUser(
-  metadata: MessageMetadata | undefined,
-): string | undefined {
-  if (metadata?.event_type !== FORWARD_EVENT_TYPE) return undefined;
-  const payload = metadata.event_payload;
-  if (payload?.ticket !== true) return undefined;
-  return typeof payload.source_user_id === "string"
-    ? payload.source_user_id
-    : undefined;
 }
 
 export async function postManagedTicketReceived(

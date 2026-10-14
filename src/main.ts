@@ -11,11 +11,10 @@ import {
 import express from "express";
 import { backlog, stopBacklog } from "./tools/backlogger.js";
 import { currentState } from "./lib/state.js";
+import { getForwardedTicketUser, type MessageMetadata } from "./lib/forward.js";
 import {
   handleManagedProgramMacro,
   postManagedTicketReceived,
-  getForwardedTicketUser,
-  type MessageMetadata,
   reopenManagedTicket,
   resolveManagedTicket,
   resolveWithMacro,
@@ -389,7 +388,7 @@ async function startBacklogTask(
     const program = await prisma.program.findFirst({
       where: { channelId: event.channel_id },
     });
-    if (!program?.managed) return;
+    if (!program) return;
 
     const history = await client.conversations.history({
       channel: event.channel_id,
@@ -401,15 +400,22 @@ async function startBacklogTask(
     if (!forwarded || forwarded.ts !== event.message_ts) return;
     if (forwarded.thread_ts && forwarded.thread_ts !== forwarded.ts) return;
 
-    await postManagedTicketReceived(
-      client,
-      {
-        ...forwarded,
-        channel: event.channel_id,
-        metadata: event.metadata,
-      } as unknown as Parameters<typeof postManagedTicketReceived>[1],
-      program,
-    );
+    if (program.managed) {
+      await postManagedTicketReceived(
+        client,
+        {
+          ...forwarded,
+          channel: event.channel_id,
+          metadata: event.metadata,
+        } as unknown as Parameters<typeof postManagedTicketReceived>[1],
+        program,
+      );
+    }
+    try {
+      await indexThread(client, program.id, event.channel_id, forwarded.ts!);
+    } catch (e) {
+      console.warn(e);
+    }
   });
 
   app.event("subteam_members_changed", async ({ event, client }) => {
